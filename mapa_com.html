@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Conceptual Teológico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        /* Basic styling for the network container and popup */
+        #mynetwork {
+            width: 100%;
+            height: 75vh; /* Adjusted height slightly for the button */
+            border: 1px solid lightgray;
+            background-color: #f8fafc; /* Light background */
+        }
+        /* Ensure popup is above the network and overlay */
+        #node-popup {
+            z-index: 100;
+        }
+        /* Ensure overlay is above network but below popup */
+        #overlay {
+            z-index: 50;
+        }
+        /* Style for Vis.js tooltips (if needed, though we use a click popup) */
+        .vis-tooltip {
+            font-family: 'Inter', sans-serif;
+            padding: 8px;
+            background-color: #333;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            max-width: 300px; /* Limit tooltip width */
+            white-space: pre-wrap; /* Allow line breaks */
+        }
+        /* Custom node styling */
+        .vis-network .vis-node {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the reset button container */
+        #controls {
+            text-align: center;
+            margin-top: 1rem; /* Add some space above the button */
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body class="font-['Inter'] bg-gray-100 p-4 md:p-8">
+
+    <h1 class="text-2xl md:text-3xl font-semibold text-center text-gray-800 mb-6">Mapa Conceptual Teológico Interactivo</h1>
+    <p class="text-center text-gray-600 mb-2">Haz clic en un nodo para ver su descripción y centrar la vista.</p>
+
+    <div id="mynetwork" class="rounded-lg shadow-md"></div>
+
+    <div id="controls">
+        <button id="reset-view-button" class="mt-4 px-5 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+            Restaurar Vista Completa
+        </button>
+    </div>
+
+    <div id="node-popup" class="hidden fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl max-w-md w-11/12 md:w-auto border border-gray-200">
+        <h3 id="popup-title" class="text-xl font-semibold mb-3 text-blue-700"></h3>
+        <p id="popup-description" class="text-gray-700 text-sm mb-4"></p>
+        <button id="close-popup" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+            Cerrar
+        </button>
+    </div>
+    <div id="overlay" class="hidden fixed inset-0 bg-black opacity-50"></div>
+
+    <script type="text/javascript">
+        // --- Constants for Colors ---
+        const defaultNodeBgColor = '#60a5fa';
+        const defaultNodeBorderColor = '#4b5563';
+        const defaultNodeFontColor = '#374151';
+        const defaultEdgeColor = '#9ca3af';
+
+        const highlightNodeBgColor = '#2563eb';
+        const highlightNodeBorderColor = '#1d4ed8';
+
+        const dimmedNodeBgColor = '#f3f4f6'; // Very light gray
+        const dimmedNodeBorderColor = '#e5e7eb';
+        const dimmedNodeFontColor = '#d1d5db';
+        const dimmedEdgeColor = '#e5e7eb'; // Very light gray
+
+        // --- Data Definition ---
+        // Nodes: id, label (display name), description (for popup)
+        const nodes = new vis.DataSet([
+            // Add all 50 nodes here (same as before)
+            { id: 1, label: 'Dios', description: 'El ser fundamental en el que se cree. Se revela como Trinidad (Padre, Hijo, Espíritu Santo). Es Creador del cielo y la tierra, fundamento de todo designio salvífico y fuente de toda verdad y bien. Es el fin último al que aspira el hombre. La oración es un diálogo con Él, y la vida cristiana busca conocer y cumplir Su voluntad. Es la Verdad misma.' },
+            { id: 2, label: 'Jesucristo', description: 'El Hijo de Dios, el Verbo encarnado. Centro de la catequesis y de la Sagrada Escritura. Es el Camino, la Verdad y la Vida. Se dio a sí mismo en rescate y es el modelo a seguir para el cristiano. A través de Él, se accede al amor del Padre y se participa de la vida trinitaria.' },
+            { id: 3, label: 'Espíritu Santo', description: 'La tercera persona de la Santísima Trinidad. Su misión en la liturgia es preparar el encuentro con Cristo y actualizar su obra salvífica. Ayuda a interpretar la Sagrada Escritura. Mediante Él, los cristianos son hechos partícipes de la condición filial y se les da un corazón nuevo con deseos santos. Impulsa el anuncio del Evangelio.' },
+            { id: 4, label: 'Revelación Divina', description: 'El acto por el cual Dios se dirige y se da al hombre. Se desarrolla en la historia de la salvación. Su fin es que el hombre responda a Dios con la fe. Se contiene en la Sagrada Escritura y la Tradición Apostólica.' },
+            { id: 5, label: 'Fe', description: 'La virtud teologal por la que se cree en Dios y en lo revelado. Es la respuesta del hombre a la Revelación. Se profesa en la Iglesia. Actúa por la caridad y lleva a buscar y hacer la voluntad de Dios.' },
+            { id: 6, label: 'Esperanza', description: 'Virtud teologal que permite aspirar al bien total (Dios) y que se confía alcanzar. Se manifiesta en el sosiego y la perseverancia.' },
+            { id: 7, label: 'Caridad', description: 'La virtud teologal que capacita para amar a Dios y al prójimo al modo divino. Es la plenitud de los mandamientos y el punto de arranque de la actividad cristiana. Implica comprender, perdonar, servir y sacrificarse.' },
+            { id: 8, label: 'Iglesia', description: 'La asamblea de todos los santos. Es el Cuerpo de Cristo. Recibió y guarda la fe de los Apóstoles. Transmite y expresa su fe en fórmulas y símbolos. Su misión es extender el Reino de Dios.' },
+            { id: 9, label: 'Hombre', description: 'Creado por Dios y capaz de Él. Posee dignidad y libertad. Está llamado a la vida cristiana y a la santidad, procurando vivir según su condición de hijo de Dios. Se relaciona con lo espiritual a través de signos y símbolos.' },
+            { id: 10, label: 'Vida Cristiana', description: 'La vocación del hombre a vivir en el Espíritu, centrada en seguir a Jesucristo. Implica la lucha por adquirir las virtudes, cumplir los mandamientos, y vivir en oración constante. Se desarrolla en medio del mundo y busca la santidad.' },
+            { id: 11, label: 'Vocación Cristiana', description: 'La llamada que se recibe al principio de la vida cristiana. Implica seguir los pasos de Jesucristo y es una llamada a la santidad. Se vive en medio del mundo, en las ocupaciones habituales.' },
+            { id: 12, label: 'Seguir a Cristo', description: 'Esfuerzo por andar por donde Él anduvo, apoyar las plantas sobre la impronta de sus pisadas. Es el camino para la santidad y la identificación con Él.' },
+            { id: 13, label: 'Identificación con Cristo', description: 'El objetivo de la vida cristiana, procurando convertirse de verdad en "otro Cristo" o "ipse Christus" entre los hombres. Implica hacer suyos sus pensamientos, afectos y acciones. Se logra siguiendo su ejemplo y a través de la oración.' },
+            { id: 14, label: 'Filiación Divina', description: 'La condición del cristiano, que por la gracia del Bautismo se convierte en hijo de Dios por adopción. Se participa de ella por medio del Espíritu Santo. Implica vivir con la conciencia de ser hijos de un Padre amoroso y buscar cumplir Su voluntad. La promesa final es ser hijo de Dios.' },
+            { id: 15, label: 'Gracia Divina', description: 'Don de Dios que hace posible obedecer Sus mandamientos, vivir las virtudes y alcanzar la santidad. Se recibe especialmente a través de los Sacramentos.' },
+            { id: 16, label: 'Sacramentos', description: 'Celebraciones de la Iglesia que giran en torno al Misterio Pascual de Cristo. Son siete: Bautismo, Confirmación, Eucaristía, Penitencia, Unción, Orden, Matrimonio. Hacen presente la obra salvífica de Cristo y dan fruto personal y eclesial.' },
+            { id: 17, label: 'Eucaristía', description: 'El sacramento central de la vida litúrgica de la Iglesia. Es el sacramento de los sacramentos, al cual se ordenan todos los demás.' },
+            { id: 18, label: 'Decálogo', description: 'Las "diez palabras" que enuncian las exigencias del amor de Dios y del prójimo. Son un camino de vida liberado del pecado. Obligan a los cristianos y forman una unidad indisociable. Los tres primeros se refieren al amor de Dios, los otros siete al amor del prójimo.' },
+            { id: 19, label: 'Virtudes', description: 'Disposiciones para obrar el bien. Son humanas y cristianas. Las teologales (Fe, Esperanza, Caridad) son dadas por Dios y tienen a Dios por objeto. Todas están interrelacionadas. Es preciso luchar por adquirirlas y practicarlas todas.' },
+            { id: 20, label: 'Oración', description: 'Diálogo o conversación con Dios. Es esencial en la vida cristiana. Puede ser vocal, meditación o contemplación. Brota de la conciencia de la propia indigencia. Permite acercarse más a Dios y sentirse con fuerza para extender el bien.' },
+            { id: 21, label: 'Meditación', description: 'Forma de oración que implica reflexionar sobre textos (bíblicos, espirituales) o la propia vida para conocer a Dios y su voluntad. Es una búsqueda de Alguien (Dios).' },
+            { id: 22, label: 'Contemplación', description: 'Forma de oración que, partiendo de la oración vocal o la meditación, lleva a un recogimiento del corazón en presencia de Dios. Se describe como un camino para sentirse amigo del Maestro. Puede convertirse en apostolado.' },
+            { id: 23, label: 'Pecado', description: 'Rompimiento de la ley de Dios. Esclaviza al hombre. El cristiano lucha contra él. Incluye pecados internos como la soberbia y la codicia.' },
+            { id: 24, label: 'Mundo', description: 'La realidad creada por Dios. El cristiano vive en el mundo pero no es mundano. Es el lugar donde se vive la vocación cristiana, se ejerce el trabajo y el apostolado, y se busca extender el reino de Cristo santificando sus estructuras.' },
+            { id: 25, label: 'Reino de Dios/Cristo', description: 'La realidad que Jesucristo vino a instaurar. La tarea del cristiano es colaborar en su extensión en la tierra. Implica más amor, paz y justicia.' },
+            { id: 26, label: 'Trabajo', description: 'Quehacer humano que, vivido con sentido sobrenatural, es medio de santificación y apostolado. Se ofrece a Dios y se realiza con empeño y diligencia. Se vive en medio de las ocupaciones habituales del mundo.' },
+            { id: 27, label: 'Libertad Cristiana', description: 'La libertad que Cristo ha ganado, propia de la persona humana. Implica responsabilidad. No es una barrera o ídolo, sino que requiere un compromiso serio. Permite intervenir en diversas cuestiones sin más límites que el Magisterio de la Iglesia.' },
+            { id: 28, label: 'Pureza de Corazón', description: 'Orden y armonía interior. Significa tener un modo santo de sentir y desear. Es alabada por Jesús. Se busca luchando contra los pecados internos y desordenados. Permite una apertura al prójimo y amar a Dios con todo el corazón.' },
+            { id: 29, label: 'Santidad', description: 'La tarea para toda la vida cristiana. Implica identificarse con Jesucristo y vivir las virtudes. Se logra en medio del mundo, santificando las realidades temporales, incluyendo el trabajo. Requiere gracia.' },
+            { id: 30, label: 'Verdad', description: 'Realidad que Dios ha revelado y que la Iglesia enseña. Jesucristo es la Verdad. El cristiano debe vivir conforme a ella y anunciarla.' },
+            { id: 31, label: 'Evangelio', description: 'Contiene por escrito el Evangelio predicado por los Apóstoles. Narra la vida y enseñanzas de Jesús para que se crea en Él y se tenga vida. Es la base de la catequesis y el apostolado.' },
+            { id: 32, label: 'Magisterio de la Iglesia', description: 'La autoridad de la Iglesia que interpreta auténticamente la Palabra de Dios contenida en la Sagrada Escritura y la Tradición Apostólica. Propone lo que se debe creer y establece límites para la libertad del cristiano en ciertas materias. Fuente principal del Catecismo y la doctrina social.' },
+            { id: 33, label: 'Tradición Apostólica', description: 'La transmisión viva del Evangelio en la Iglesia. Contiene la lista de los Libros Santos (canon) y, junto con la Sagrada Escritura, es fuente de la Revelación Divina.' },
+            { id: 34, label: 'Sagrada Escritura', description: 'Libros Santos inspirados por Dios. Es una de las fuentes principales de la doctrina católica. Se ha de leer e interpretar con el mismo Espíritu con que fue escrita, prestando atención a su unidad y teniendo a Cristo como centro.' },
+            { id: 35, label: 'Nueva Jerusalén', description: 'La realidad futura donde Dios renovará todo. Es el lugar donde se cumplirá la promesa final a los que venzan.' },
+            { id: 36, label: 'Vencedor', description: 'Aquel que supera las dificultades, las tentaciones y se vence a sí mismo por amor de Dios. Es a quien se dirige la promesa final de Dios en la Nueva Jerusalén.' },
+            { id: 37, label: 'Promesa Final', description: 'La promesa definitiva de Dios a los que venzan. Implica que Él será su Dios y ellos serán Sus hijos, en el contexto de la renovación de todo en la Nueva Jerusalén.' },
+            { id: 38, label: 'Catequesis', description: 'La exposición orgánica y sintética de la doctrina católica. Tiene a Jesucristo como centro esencial. Se basa en la Escritura, Tradición y Magisterio. Busca introducir en el Misterio de Cristo y llevar a la comunión con Él. Está unida a toda la vida de la Iglesia.' },
+            { id: 39, label: 'Liturgia', description: 'La celebración del misterio de Cristo en la Iglesia. Implica signos y símbolos. Gira en torno al Sacrificio Eucarístico y los Sacramentos. La catequesis litúrgica busca introducir en este misterio.' },
+            { id: 40, label: 'Humildad', description: 'Virtud fundamental que enlaza a las otras y fundamenta la eficacia de la lucha espiritual. Implica luchar contra la soberbia y reconocer la propia indigencia ante Dios. Jesús es modelo de humildad.' },
+            { id: 41, label: 'Sinceridad', description: 'Virtud necesaria para la lucha espiritual. Va unida a la humildad. Implica ser "salvajemente sinceros" con prudencia y ayuda a vencer el pecado, especialmente la soberbia.' },
+            { id: 42, label: 'Templanza', description: 'Virtud que permite moderar el uso de los bienes materiales y los afectos. Sus frutos incluyen la sobriedad, modestia, comprensión, recato. Lucha contra la destemplanza y la impureza. No es limitación, sino grandeza.' },
+            { id: 43, label: 'Prudencia', description: 'Virtud necesaria para dar criterio, fortalecer, corregir. Guía la sinceridad con educación.' },
+            { id: 44, label: 'Justicia', description: 'Virtud que se entrelaza con otras. Implica obrar el bien y buscarla en el mundo. Forma parte de la Doctrina Social de la Iglesia.' },
+            { id: 45, label: 'Servicio', description: 'Dedicación a los demás. Es una manifestación de la caridad, aprendida de Cristo. Implica fomentar la felicidad ajena.' },
+            { id: 46, label: 'Apostolado', description: 'Tarea del cristiano de anunciar a Cristo y extender Su Reino. Se realiza en medio del mundo, a través de las obras y palabras, incluyendo el propio trabajo. Se basa en la caridad y la comprensión.' },
+            { id: 47, label: 'Lucha espiritual', description: 'Esfuerzo constante del cristiano contra las propias debilidades y las tentaciones, especialmente contra el pecado, la soberbia y el egoísmo. La humildad y la sinceridad son fundamentales para esta lucha.' },
+            { id: 48, label: 'Conversión', description: 'Acto inicial y continuo de volver a Dios y reencontrar la luz de Cristo. Implica un examen hondo y estar dispuesto a recomenzar.' },
+            { id: 49, label: 'Discipulado', description: 'Condición de aquel que se hace discípulo de Cristo para conocer los misterios del Reino y aprender de Él. Se le reconoce por la caridad mutua.' },
+            { id: 50, label: 'Voluntad de Dios', description: 'Los designios de Dios para nuestra vida. Quien cree busca conocerla y hacerla. La oración ayuda a meterla en la vida y a unirse a ella.' }
+        ]);
+
+        // Edges: from (source node id), to (target node id)
+        // Based on the provided "Conceptos con los que enlaza"
+        const edges = new vis.DataSet([
+             // Add all 190+ edges here (same as before)
+            // Dios (1) connections
+            { from: 1, to: 2 }, { from: 1, to: 3 }, { from: 1, to: 4 }, { from: 1, to: 5 }, { from: 1, to: 6 }, { from: 1, to: 7 }, { from: 1, to: 8 }, { from: 1, to: 9 }, { from: 1, to: 10 }, { from: 1, to: 14 }, { from: 1, to: 15 }, { from: 1, to: 16 }, { from: 1, to: 18 }, { from: 1, to: 19 }, { from: 1, to: 20 }, { from: 1, to: 24 }, { from: 1, to: 25 }, { from: 1, to: 26 }, { from: 1, to: 27 }, { from: 1, to: 28 }, { from: 1, to: 29 }, { from: 1, to: 30 }, { from: 1, to: 31 }, { from: 1, to: 32 }, { from: 1, to: 33 }, { from: 1, to: 34 }, { from: 1, to: 35 }, { from: 1, to: 36 }, { from: 1, to: 37 }, { from: 1, to: 48 }, { from: 1, to: 50 },
+            // Jesucristo (2) connections
+            { from: 2, to: 1 }, { from: 2, to: 3 }, { from: 2, to: 4 }, { from: 2, to: 5 }, { from: 2, to: 6 }, { from: 2, to: 7 }, { from: 2, to: 8 }, { from: 2, to: 9 }, { from: 2, to: 10 }, { from: 2, to: 11 }, { from: 2, to: 12 }, { from: 2, to: 13 }, { from: 2, to: 14 }, { from: 2, to: 15 }, { from: 2, to: 16 }, { from: 2, to: 18 }, { from: 2, to: 19 }, { from: 2, to: 20 }, { from: 2, to: 23 }, { from: 2, to: 24 }, { from: 2, to: 25 }, { from: 2, to: 26 }, { from: 2, to: 27 }, { from: 2, to: 28 }, { from: 2, to: 29 }, { from: 2, to: 30 }, { from: 2, to: 31 }, { from: 2, to: 32 }, { from: 2, to: 33 }, { from: 2, to: 34 }, { from: 2, to: 35 }, { from: 2, to: 36 }, { from: 2, to: 37 }, { from: 2, to: 38 }, { from: 2, to: 39 }, { from: 2, to: 45 }, { from: 2, to: 46 }, { from: 2, to: 47 }, { from: 2, to: 48 }, { from: 2, to: 49 }, { from: 2, to: 50 }, { from: 2, to: 17 }, // Added Eucaristía link
+            // Espíritu Santo (3) connections
+            { from: 3, to: 1 }, { from: 3, to: 2 }, { from: 3, to: 4 }, { from: 3, to: 5 }, { from: 3, to: 7 }, { from: 3, to: 8 }, { from: 3, to: 9 }, { from: 3, to: 10 }, { from: 3, to: 14 }, { from: 3, to: 15 }, { from: 3, to: 16 }, { from: 3, to: 34 }, { from: 3, to: 28 }, { from: 3, to: 29 }, { from: 3, to: 46 }, { from: 3, to: 20 },
+            // Revelación Divina (4) connections
+            { from: 4, to: 1 }, { from: 4, to: 34 }, { from: 4, to: 33 }, { from: 4, to: 32 }, { from: 4, to: 31 }, // Added Evangelio link
+            // Fe (5) connections
+            { from: 5, to: 1 }, { from: 5, to: 2 }, { from: 5, to: 4 }, { from: 5, to: 6 }, { from: 5, to: 7 }, { from: 5, to: 8 }, { from: 5, to: 9 }, { from: 5, to: 10 }, { from: 5, to: 14 }, { from: 5, to: 15 }, { from: 5, to: 16 }, { from: 5, to: 30 }, { from: 5, to: 31 }, { from: 5, to: 32 }, { from: 5, to: 34 }, { from: 5, to: 50 }, { from: 5, to: 38 }, // Added Catequesis link
+            // Esperanza (6) connections
+            { from: 6, to: 1 }, { from: 6, to: 5 }, { from: 6, to: 7 }, { from: 6, to: 10 }, { from: 6, to: 35 },
+            // Caridad (7) connections
+            { from: 7, to: 1 }, { from: 7, to: 2 }, { from: 7, to: 3 }, { from: 7, to: 5 }, { from: 7, to: 6 }, { from: 7, to: 8 }, { from: 7, to: 9 }, { from: 7, to: 10 }, { from: 7, to: 18 }, { from: 7, to: 19 }, { from: 7, to: 20 }, { from: 7, to: 28 }, { from: 7, to: 29 }, { from: 7, to: 45 }, { from: 7, to: 46 }, { from: 7, to: 47 }, { from: 7, to: 44 }, // Added Justicia link
+             // Iglesia (8) connections
+            { from: 8, to: 1 }, { from: 8, to: 2 }, { from: 8, to: 3 }, { from: 8, to: 4 }, { from: 8, to: 5 }, { from: 8, to: 9 }, { from: 8, to: 15 }, { from: 8, to: 16 }, { from: 8, to: 32 }, { from: 8, to: 33 }, { from: 8, to: 34 }, { from: 8, to: 38 }, { from: 8, to: 39 }, { from: 8, to: 46 }, { from: 8, to: 29 }, // Added Santidad link
+            // Hombre (9) connections
+            { from: 9, to: 1 }, { from: 9, to: 2 }, { from: 9, to: 3 }, { from: 9, to: 4 }, { from: 9, to: 5 }, { from: 9, to: 7 }, { from: 9, to: 8 }, { from: 9, to: 10 }, { from: 9, to: 11 }, { from: 9, to: 13 }, { from: 9, to: 14 }, { from: 9, to: 15 }, { from: 9, to: 23 }, { from: 9, to: 24 }, { from: 9, to: 27 }, { from: 9, to: 28 }, { from: 9, to: 29 }, { from: 9, to: 19 }, { from: 9, to: 30 }, // Added Verdad link
+            // Vida Cristiana (10) connections
+            { from: 10, to: 1 }, { from: 10, to: 2 }, { from: 10, to: 3 }, { from: 10, to: 5 }, { from: 10, to: 6 }, { from: 10, to: 7 }, { from: 10, to: 8 }, { from: 10, to: 9 }, { from: 10, to: 11 }, { from: 10, to: 12 }, { from: 10, to: 13 }, { from: 10, to: 14 }, { from: 10, to: 15 }, { from: 10, to: 16 }, { from: 10, to: 18 }, { from: 10, to: 19 }, { from: 10, to: 20 }, { from: 10, to: 23 }, { from: 10, to: 24 }, { from: 10, to: 25 }, { from: 10, to: 26 }, { from: 10, to: 27 }, { from: 10, to: 28 }, { from: 10, to: 29 }, { from: 10, to: 30 }, { from: 10, to: 46 }, { from: 10, to: 47 }, // Added Lucha espiritual link
+            // Vocación Cristiana (11) connections
+            { from: 11, to: 1 }, { from: 11, to: 2 }, { from: 11, to: 9 }, { from: 11, to: 10 }, { from: 11, to: 29 }, { from: 11, to: 24 }, { from: 11, to: 26 }, { from: 11, to: 46 }, // Added Mundo, Trabajo, Apostolado links
+            // Seguir a Cristo (12) connections
+            { from: 12, to: 2 }, { from: 12, to: 11 }, { from: 12, to: 10 }, { from: 12, to: 49 },
+            // Identificación con Cristo (13) connections
+            { from: 13, to: 2 }, { from: 13, to: 10 }, { from: 13, to: 14 }, { from: 13, to: 29 }, { from: 13, to: 20 }, { from: 13, to: 9 }, // Added Hombre link
+            // Filiación Divina (14) connections
+            { from: 14, to: 1 }, { from: 14, to: 2 }, { from: 14, to: 3 }, { from: 14, to: 9 }, { from: 14, to: 10 }, { from: 14, to: 15 }, { from: 14, to: 20 }, { from: 14, to: 40 }, { from: 14, to: 28 }, { from: 14, to: 37 }, { from: 14, to: 48 }, { from: 14, to: 5 }, // Added Fe link
+            // Gracia Divina (15) connections
+            { from: 15, to: 1 }, { from: 15, to: 2 }, { from: 15, to: 3 }, { from: 15, to: 5 }, { from: 15, to: 7 }, { from: 15, to: 8 }, { from: 15, to: 9 }, { from: 15, to: 10 }, { from: 15, to: 14 }, { from: 15, to: 16 }, { from: 15, to: 18 }, { from: 15, to: 19 }, { from: 15, to: 47 }, { from: 15, to: 29 }, { from: 15, to: 46 },
+            // Sacramentos (16) connections
+            { from: 16, to: 2 }, { from: 16, to: 3 }, { from: 16, to: 15 }, { from: 16, to: 8 }, { from: 16, to: 10 }, { from: 16, to: 39 }, { from: 16, to: 5 }, { from: 16, to: 17 }, { from: 16, to: 38 }, // Added Fe, Eucaristía, Catequesis links
+            // Eucaristía (17) connections
+            { from: 17, to: 2 }, { from: 17, to: 16 }, { from: 17, to: 39 },
+            // Decálogo (18) connections
+            { from: 18, to: 1 }, { from: 18, to: 2 }, { from: 18, to: 7 }, { from: 18, to: 10 }, { from: 18, to: 23 }, { from: 18, to: 24 }, { from: 18, to: 28 }, { from: 18, to: 34 }, { from: 18, to: 15 }, { from: 18, to: 19 }, // Added Gracia, Virtudes links
+            // Virtudes (19) connections
+            { from: 19, to: 1 }, { from: 19, to: 2 }, { from: 19, to: 3 }, { from: 19, to: 7 }, { from: 19, to: 9 }, { from: 19, to: 10 }, { from: 19, to: 15 }, { from: 19, to: 18 }, { from: 19, to: 29 }, { from: 19, to: 40 }, { from: 19, to: 41 }, { from: 19, to: 42 }, { from: 19, to: 43 }, { from: 19, to: 44 }, { from: 19, to: 45 }, { from: 19, to: 47 }, // Added Lucha espiritual link
+            // Oración (20) connections
+            { from: 20, to: 1 }, { from: 20, to: 2 }, { from: 20, to: 3 }, { from: 20, to: 10 }, { from: 20, to: 14 }, { from: 20, to: 21 }, { from: 20, to: 22 }, { from: 20, to: 7 }, { from: 20, to: 13 }, { from: 20, to: 40 }, { from: 20, to: 50 }, { from: 20, to: 34 }, // Added Caridad, Identificación, Humildad, Voluntad de Dios, Sagrada Escritura links
+            // Meditación (21) connections
+            { from: 21, to: 20 }, { from: 21, to: 34 }, { from: 21, to: 10 }, { from: 21, to: 22 }, // Added Contemplación link
+            // Contemplación (22) connections
+            { from: 22, to: 20 }, { from: 22, to: 21 }, { from: 22, to: 46 },
+            // Pecado (23) connections
+            { from: 23, to: 18 }, { from: 23, to: 9 }, { from: 23, to: 47 }, { from: 23, to: 48 }, { from: 23, to: 40 }, { from: 23, to: 41 }, { from: 23, to: 28 }, { from: 23, to: 27 }, // Added Libertad Cristiana link
+            // Mundo (24) connections
+            { from: 24, to: 1 }, { from: 24, to: 2 }, { from: 24, to: 3 }, { from: 24, to: 9 }, { from: 24, to: 10 }, { from: 24, to: 11 }, { from: 24, to: 26 }, { from: 24, to: 27 }, { from: 24, to: 25 }, { from: 24, to: 29 }, { from: 24, to: 46 }, { from: 24, to: 18 }, { from: 24, to: 44 }, // Added Decálogo, Justicia links
+            // Reino de Dios/Cristo (25) connections
+            { from: 25, to: 1 }, { from: 25, to: 2 }, { from: 25, to: 24 }, { from: 25, to: 10 }, { from: 25, to: 46 },
+            // Trabajo (26) connections
+            { from: 26, to: 1 }, { from: 26, to: 2 }, { from: 26, to: 9 }, { from: 26, to: 10 }, { from: 26, to: 11 }, { from: 26, to: 24 }, { from: 26, to: 29 }, { from: 26, to: 46 }, { from: 26, to: 45 },
+            // Libertad Cristiana (27) connections
+            { from: 27, to: 2 }, { from: 27, to: 9 }, { from: 27, to: 10 }, { from: 27, to: 23 }, { from: 27, to: 24 }, { from: 27, to: 32 }, { from: 27, to: 1 }, // Added Dios link
+            // Pureza de Corazón (28) connections
+            { from: 28, to: 3 }, { from: 28, to: 7 }, { from: 28, to: 9 }, { from: 28, to: 10 }, { from: 28, to: 23 }, { from: 28, to: 42 }, { from: 28, to: 18 }, { from: 28, to: 14 }, { from: 28, to: 47 }, // Added Decálogo, Filiación Divina, Lucha espiritual links
+            // Santidad (29) connections
+            { from: 29, to: 1 }, { from: 29, to: 2 }, { from: 29, to: 3 }, { from: 29, to: 7 }, { from: 29, to: 8 }, { from: 29, to: 9 }, { from: 29, to: 10 }, { from: 29, to: 11 }, { from: 29, to: 13 }, { from: 29, to: 15 }, { from: 29, to: 19 }, { from: 29, to: 26 }, { from: 29, to: 24 }, { from: 29, to: 36 }, // Added Mundo, Vencedor links
+            // Verdad (30) connections
+            { from: 30, to: 1 }, { from: 30, to: 2 }, { from: 30, to: 5 }, { from: 30, to: 9 }, { from: 30, to: 10 }, { from: 30, to: 32 }, { from: 30, to: 46 }, { from: 30, to: 41 }, // Added Sinceridad link
+            // Evangelio (31) connections
+            { from: 31, to: 2 }, { from: 31, to: 4 }, { from: 31, to: 5 }, { from: 31, to: 34 }, { from: 31, to: 38 }, { from: 31, to: 32 }, { from: 31, to: 33 }, { from: 31, to: 46 }, { from: 31, to: 1 }, // Added Dios link
+            // Magisterio de la Iglesia (32) connections
+            { from: 32, to: 8 }, { from: 32, to: 4 }, { from: 32, to: 34 }, { from: 32, to: 33 }, { from: 32, to: 5 }, { from: 32, to: 38 }, { from: 32, to: 27 }, { from: 32, to: 43 }, { from: 32, to: 1 }, { from: 32, to: 2 }, { from: 32, to: 30 }, // Added Prudencia, Dios, Jesucristo, Verdad links
+            // Tradición Apostólica (33) connections
+            { from: 33, to: 8 }, { from: 33, to: 4 }, { from: 33, to: 32 }, { from: 33, to: 34 }, { from: 33, to: 5 }, { from: 33, to: 1 }, { from: 33, to: 31 }, { from: 33, to: 38 }, // Added Dios, Evangelio, Catequesis links
+            // Sagrada Escritura (34) connections
+            { from: 34, to: 1 }, { from: 34, to: 2 }, { from: 34, to: 3 }, { from: 34, to: 4 }, { from: 34, to: 5 }, { from: 34, to: 18 }, { from: 34, to: 31 }, { from: 34, to: 32 }, { from: 34, to: 33 }, { from: 34, to: 21 }, { from: 34, to: 8 }, { from: 34, to: 38 }, // Added Iglesia, Catequesis links
+            // Nueva Jerusalén (35) connections
+            { from: 35, to: 1 }, { from: 35, to: 36 }, { from: 35, to: 37 }, { from: 35, to: 6 }, { from: 35, to: 2 }, // Added Esperanza, Jesucristo links
+            // Vencedor (36) connections
+            { from: 36, to: 1 }, { from: 36, to: 2 }, { from: 36, to: 37 }, { from: 36, to: 35 }, { from: 36, to: 29 }, { from: 36, to: 47 },
+            // Promesa Final (37) connections
+            { from: 37, to: 1 }, { from: 37, to: 14 }, { from: 37, to: 36 }, { from: 37, to: 35 }, { from: 37, to: 2 }, // Added Jesucristo link
+            // Catequesis (38) connections
+            { from: 38, to: 2 }, { from: 38, to: 8 }, { from: 38, to: 5 }, { from: 38, to: 32 }, { from: 38, to: 34 }, { from: 38, to: 33 }, { from: 38, to: 39 }, { from: 38, to: 16 }, { from: 38, to: 31 }, // Added Liturgia, Sacramentos, Evangelio links
+            // Liturgia (39) connections
+            { from: 39, to: 2 }, { from: 39, to: 3 }, { from: 39, to: 8 }, { from: 39, to: 16 }, { from: 39, to: 38 }, { from: 39, to: 17 }, // Added Eucaristía link
+            // Humildad (40) connections
+            { from: 40, to: 2 }, { from: 40, to: 19 }, { from: 40, to: 14 }, { from: 40, to: 23 }, { from: 40, to: 41 }, { from: 40, to: 20 }, { from: 40, to: 47 }, // Added Lucha espiritual link
+            // Sinceridad (41) connections
+            { from: 41, to: 19 }, { from: 41, to: 47 }, { from: 41, to: 40 }, { from: 41, to: 23 }, { from: 41, to: 43 }, { from: 41, to: 30 }, // Added Prudencia, Verdad links
+            // Templanza (42) connections
+            { from: 42, to: 19 }, { from: 42, to: 28 }, { from: 42, to: 44 }, // Added Justicia link
+            // Prudencia (43) connections
+            { from: 43, to: 19 }, { from: 43, to: 32 }, { from: 43, to: 41 },
+            // Justicia (44) connections
+            { from: 44, to: 19 }, { from: 44, to: 7 }, { from: 44, to: 10 }, { from: 44, to: 32 }, { from: 44, to: 24 }, { from: 44, to: 45 }, { from: 44, to: 42 }, // Added Servicio, Templanza links
+            // Servicio (45) connections
+            { from: 45, to: 2 }, { from: 45, to: 7 }, { from: 45, to: 9 }, { from: 45, to: 19 }, { from: 45, to: 10 }, { from: 45, to: 32 }, { from: 45, to: 26 }, { from: 45, to: 44 }, // Added Trabajo, Justicia links
+            // Apostolado (46) connections
+            { from: 46, to: 2 }, { from: 46, to: 3 }, { from: 46, to: 8 }, { from: 46, to: 10 }, { from: 46, to: 11 }, { from: 46, to: 24 }, { from: 46, to: 25 }, { from: 46, to: 26 }, { from: 46, to: 7 }, { from: 46, to: 30 }, { from: 46, to: 31 }, { from: 46, to: 22 }, { from: 46, to: 49 }, { from: 46, to: 15 }, // Added Contemplación, Discipulado, Gracia Divina links
+            // Lucha espiritual (47) connections
+            { from: 47, to: 9 }, { from: 47, to: 10 }, { from: 47, to: 19 }, { from: 47, to: 23 }, { from: 47, to: 41 }, { from: 47, to: 40 }, { from: 47, to: 28 }, { from: 47, to: 36 }, { from: 47, to: 2 }, { from: 47, to: 7 }, { from: 47, to: 15 }, // Added Vencedor, Jesucristo, Caridad, Gracia Divina links
+            // Conversión (48) connections
+            { from: 48, to: 1 }, { from: 48, to: 2 }, { from: 48, to: 10 }, { from: 48, to: 23 }, { from: 48, to: 14 },
+            // Discipulado (49) connections
+            { from: 49, to: 2 }, { from: 49, to: 12 }, { from: 49, to: 10 }, { from: 49, to: 46 }, // Added Apostolado link
+            // Voluntad de Dios (50) connections
+            { from: 50, to: 1 }, { from: 50, to: 2 }, { from: 50, to: 5 }, { from: 50, to: 20 }, { from: 50, to: 13 }, // Added Identificación con Cristo link
+        ]);
+
+        // Store all node and edge IDs for resetting
+        const allNodeIds = nodes.getIds();
+        const allEdgeIds = edges.getIds();
+
+        // --- Network Configuration ---
+        const container = document.getElementById('mynetwork');
+        const data = {
+            nodes: nodes,
+            edges: edges
+        };
+        const options = {
+            // General options
+            locale: 'es', // Use Spanish for UI elements if available
+            interaction: {
+                hover: true, // Enable hover effects
+                tooltipDelay: 200,
+                navigationButtons: true,
+                keyboard: true
+            },
+            // Node styling
+            nodes: {
+                shape: 'dot',
+                size: 18,
+                font: {
+                    size: 14,
+                    color: defaultNodeFontColor
+                },
+                borderWidth: 2,
+                color: {
+                    border: defaultNodeBorderColor,
+                    background: defaultNodeBgColor,
+                    highlight: {
+                        border: highlightNodeBorderColor,
+                        background: highlightNodeBgColor
+                    },
+                    hover: {
+                        border: highlightNodeBorderColor,
+                        background: '#93c5fd' // Lighter blue for hover
+                    }
+                },
+                shadow: true
+            },
+            // Edge styling
+            edges: {
+                width: 1,
+                color: {
+                    color: defaultEdgeColor,
+                    highlight: '#3b82f6',
+                    hover: '#6b7280'
+                },
+                arrows: {
+                    to: { enabled: true, scaleFactor: 0.5 }
+                },
+                smooth: {
+                    enabled: true,
+                    type: "continuous",
+                    roundness: 0.5
+                }
+            },
+            // Physics engine for layout
+            physics: {
+                enabled: true,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -35,
+                    centralGravity: 0.01,
+                    springLength: 100,
+                    springConstant: 0.08,
+                    damping: 0.6
+                },
+                stabilization: {
+                    iterations: 1000,
+                    fit: true
+                }
+            },
+            layout: {
+                // hierarchical: false // Keep default layout
+            }
+        };
+
+        // --- Initialization ---
+        const network = new vis.Network(container, data, options);
+
+        // --- Popup Logic ---
+        const popup = document.getElementById('node-popup');
+        const popupTitle = document.getElementById('popup-title');
+        const popupDescription = document.getElementById('popup-description');
+        const closePopupButton = document.getElementById('close-popup');
+        const overlay = document.getElementById('overlay');
+        const resetButton = document.getElementById('reset-view-button');
+
+        // Function to show the popup
+        function showPopup(title, description) {
+            popupTitle.textContent = title;
+            popupDescription.textContent = description;
+            popup.classList.remove('hidden');
+            overlay.classList.remove('hidden');
+        }
+
+        // Function to hide the popup
+        function hidePopup() {
+            popup.classList.add('hidden');
+            overlay.classList.add('hidden');
+        }
+
+        // Function to reset all nodes and edges to default appearance
+        function resetNetworkAppearance() {
+            const nodesUpdate = allNodeIds.map(id => ({
+                id: id,
+                color: {
+                    background: defaultNodeBgColor,
+                    border: defaultNodeBorderColor
+                },
+                font: { color: defaultNodeFontColor },
+                // hidden: false // Ensure nodes are visible if hidden was used
+            }));
+            nodes.update(nodesUpdate);
+
+            const edgesUpdate = allEdgeIds.map(id => ({
+                id: id,
+                color: defaultEdgeColor,
+                // hidden: false // Ensure edges are visible
+            }));
+            edges.update(edgesUpdate);
+        }
+
+        // --- Event Listeners ---
+
+        // Event listener for node clicks (Focus & Dim)
+        network.on("click", function (params) {
+            // First, reset appearance in case a previous node was selected
+            resetNetworkAppearance();
+            hidePopup(); // Hide popup if a new node is clicked
+
+            if (params.nodes.length > 0) {
+                const clickedNodeId = params.nodes[0];
+                const nodeData = nodes.get(clickedNodeId);
+
+                // Show popup for the clicked node
+                if (nodeData && nodeData.description) {
+                    showPopup(nodeData.label, nodeData.description);
+                }
+
+                // Focus on the clicked node
+                network.focus(clickedNodeId, {
+                    scale: 1.0, // Zoom level on focus
+                    animation: { duration: 800, easingFunction: 'easeInOutQuad' }
+                });
+
+                // Get connected nodes and edges
+                const connectedNodeIds = network.getConnectedNodes(clickedNodeId);
+                const connectedEdgeIds = network.getConnectedEdges(clickedNodeId);
+
+                // Prepare updates for dimming
+                const nodesToUpdate = [];
+                const edgesToUpdate = [];
+
+                // Dim unconnected nodes
+                allNodeIds.forEach(nodeId => {
+                    if (nodeId !== clickedNodeId && !connectedNodeIds.includes(nodeId)) {
+                        nodesToUpdate.push({
+                            id: nodeId,
+                            color: {
+                                background: dimmedNodeBgColor,
+                                border: dimmedNodeBorderColor
+                            },
+                            font: { color: dimmedNodeFontColor }
+                        });
+                    }
+                });
+
+                // Dim unconnected edges
+                 allEdgeIds.forEach(edgeId => {
+                    // Check if the edge connects to the clicked node
+                    const edge = edges.get(edgeId);
+                    if (edge && edge.from !== clickedNodeId && edge.to !== clickedNodeId) {
+                         // Check if the edge connects *between* two directly connected nodes (optional, can keep these visible)
+                         // For simplicity, let's dim all edges not directly connected to the clicked node
+                         if (!connectedEdgeIds.includes(edgeId)) {
+                            edgesToUpdate.push({
+                                id: edgeId,
+                                color: dimmedEdgeColor
+                            });
+                         }
+                    }
+                 });
+
+
+                // Apply the dimming updates
+                if (nodesToUpdate.length > 0) {
+                    nodes.update(nodesToUpdate);
+                }
+                 if (edgesToUpdate.length > 0) {
+                    edges.update(edgesToUpdate);
+                 }
+
+            } else {
+                 // Clicked on the background - reset view? (Optional)
+                 // resetNetworkAppearance();
+                 // network.fit({ animation: true });
+                 hidePopup(); // Hide popup if background is clicked
+            }
+        });
+
+        // Event listener for the close popup button
+        closePopupButton.addEventListener('click', hidePopup);
+
+        // Event listener for the overlay (click outside popup to close)
+        overlay.addEventListener('click', hidePopup);
+
+        // Event listener for the Reset View button
+        resetButton.addEventListener('click', function() {
+            hidePopup(); // Close popup if open
+            resetNetworkAppearance(); // Restore default colors
+            network.fit({ // Zoom out to fit the whole network
+                 animation: { duration: 800, easingFunction: 'easeInOutQuad' }
+            });
+        });
+
+        // Optional: Fit the network to the view after initial stabilization
+        network.once('stabilizationIterationsDone', function () {
+            network.fit();
+        });
+
+        // Handle window resize to keep the network centered/fitted
+        window.addEventListener('resize', function() {
+            // Only fit if no node is currently focused/zoomed
+            if (network.getScale() === 1.0 && network.getViewPosition().x === 0 && network.getViewPosition().y === 0) {
+                 network.fit();
+            }
+            // Or always fit:
+            // network.fit();
+        });
+
+    </script>
+
+</body>
+</html>
